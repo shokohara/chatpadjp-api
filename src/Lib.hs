@@ -11,7 +11,7 @@ import Data.String.Here
 import Control.Lens
 import Test.WebDriver
 import Test.WebDriver.Commands.Wait
-import Test.WebDriver.Common.Keys
+import qualified Test.WebDriver.Common.Keys as K
 import Control.Monad.IO.Class
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -29,22 +29,32 @@ someFunc = putStrLn "someFunc"
 
 main4 :: IO ()
 main4 = runSession myConfig $ do
-  cs <- cookies
-  liftIO $ mapM_ print cs
   openPage "http://chatpad.jp/"
---  cs <- cookies
---  liftIO $ mapM_ print cs
+  printCookies
   e <- findElem . ByXPath $ "//*[@id=\"body\"]/div[2]/div[1]/div/div[4]/a"
   click e
   u <- getCurrentURL
   liftIO $ putStrLn u
-  getSource >>= printMessages . T.unpack
+--  liftIO $ fmap (putStrLn) getCurrentURL
+  cs <- cookies
+  liftIO $ mapM_ print cs
+  printMessages
   waitUntil 60 $ findElem (ByXPath [here|//*[@id="chatLog"]/div/div[2][contains(., "チャットを始めるよー！")]|])
   liftIO $ threadDelay 2000
-  sendText $ "こんにちは" ++ (T.unpack enter)
-  getSource >>= printMessages . T.unpack
---  return $ getSource >>= print
-  getSource >>= printMessages . T.unpack
+  sendText $ "こんにちは" ++ (T.unpack K.enter)
+  printMessages
+  return $ do
+    a <- return $ printMessages
+--    if "チャット相手がチャットを終了" `elem` a
+    return "x"
+  return $ do
+    a <- return $ printMessages
+    x <- getLine
+    return $ sendText x
+--    return $ getLine >>= sendText
+--    return $ ""
+--  liftIO $ getLine >>= sendText
+  printMessages
   waitUntil 100000000000000 $ findElem (ByXPath [here|//*[@id="chatLog"]/div/div[2][contains(., "チャット相手がチャットを終了したよ！")]|])
   writeSource "source.html"
   screenshotWriteFile "google.png"
@@ -59,9 +69,20 @@ main4 = runSession myConfig $ do
 ttt :: T.Text -> Bool
 ttt = T.isInfixOf "終了"
 
-printMessages :: String -> WD ()
-printMessages x = do
-  let doc = readString [withParseHTML yes, withWarnings no] x
+--i2w :: WD a -> IO a
+--i2w x = do
+--  a <- x
+--  liftIO $ x
+
+printCookies :: WD()
+printCookies = do
+  c <- cookies
+  liftIO $ mapM_ print c
+
+printMessages :: WD ()
+printMessages = do
+  x <- getSource
+  let doc = readString [withParseHTML yes, withWarnings no] (T.unpack x)
   liftIO $ runX (doc >>> css "#chatLog .message .textInI,.textInRe,.textInSystem" >>> getAttrValue "class") >>= mapM_ putStrLn
   liftIO $ runX (doc >>> css "#chatLog .message .textInI,.textInRe,.textInSystem" >>> getAttrValue "class" &&& Text.XML.HXT.Core.deep Text.XML.HXT.Core.getText) >>= mapM_ putStrLn . concat . t2ls
 
